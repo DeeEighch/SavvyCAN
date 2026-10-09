@@ -76,7 +76,7 @@ jobs:
           "Commit: $env:GITHUB_SHA" | Set-Content (Join-Path $package 'BUILD.txt') -Encoding utf8
 
           foreach ($required in @('SavvyCAN.exe', 'Qt5Core.dll', 'Qt5Gui.dll',
-              'Qt5Widgets.dll', 'Qt5Help.dll', 'Qt5Qml.dll', 'Qt5SerialBus.dll',
+              'Qt5Widgets.dll', 'Qt5Qml.dll', 'Qt5SerialBus.dll',
               'Qt5SerialPort.dll', 'platforms/qwindows.dll')) {
             if (-not (Test-Path (Join-Path $package $required))) {
               throw "Missing packaged dependency: $required"
