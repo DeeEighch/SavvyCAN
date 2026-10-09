@@ -56,8 +56,22 @@ jobs:
           $package = Join-Path $env:GITHUB_WORKSPACE 'package/SavvyCAN-Windows_x64'
           New-Item -ItemType Directory -Path $package -Force | Out-Null
           Copy-Item -LiteralPath 'release/SavvyCAN.exe' -Destination $package
-          windeployqt --release --compiler-runtime --no-translations "$package/SavvyCAN.exe"
+          windeployqt --release --no-compiler-runtime --no-translations "$package/SavvyCAN.exe"
           if ($LASTEXITCODE -ne 0) { throw 'windeployqt failed' }
+
+          # Package app-local MSVC DLLs instead of the redistributable installer.
+          if (-not $env:VCToolsRedistDir) { throw 'VCToolsRedistDir is not configured' }
+          $crtRoot = Join-Path $env:VCToolsRedistDir 'x64'
+          $crt = Get-ChildItem -LiteralPath $crtRoot -Directory |
+            Where-Object {
+              $_.Name -like 'Microsoft.VC*.CRT' -and
+              (Test-Path (Join-Path $_.FullName 'vcruntime140.dll')) -and
+              (Test-Path (Join-Path $_.FullName 'msvcp140.dll'))
+            } | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $crt) { throw "MSVC x64 CRT directory not found in $crtRoot" }
+          Write-Host "Packaging MSVC runtime from $($crt.FullName)"
+          Get-ChildItem -LiteralPath $crt.FullName -Filter '*.dll' |
+            Copy-Item -Destination $package
 
           # Include dynamically loaded Qt CAN plugins.
           $canPlugins = Join-Path $env:QT_ROOT_DIR 'plugins/canbus'
@@ -77,13 +91,11 @@ jobs:
 
           foreach ($required in @('SavvyCAN.exe', 'Qt5Core.dll', 'Qt5Gui.dll',
               'Qt5Widgets.dll', 'Qt5Qml.dll', 'Qt5SerialBus.dll',
-              'Qt5SerialPort.dll', 'platforms/qwindows.dll')) {
+              'Qt5SerialPort.dll', 'platforms/qwindows.dll',
+              'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
             if (-not (Test-Path (Join-Path $package $required))) {
               throw "Missing packaged dependency: $required"
             }
-          }
-          if (-not (Get-ChildItem "$package/vcruntime140*.dll" -ErrorAction SilentlyContinue)) {
-            throw 'Missing MSVC runtime DLLs'
           }
           New-Item -ItemType Directory -Path 'dist' -Force | Out-Null
           Compress-Archive -Path $package -DestinationPath 'dist/SavvyCAN-Windows_x64.zip'
